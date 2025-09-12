@@ -1,4 +1,4 @@
-name: Build with Cosmopolitan
+name: Build for aarch64
 
 on:
   push:
@@ -16,23 +16,20 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+        
+      - name: Install ARM cross compiler
+        run: sudo apt-get install gcc-aarch64-linux-gnu
+        
       - name: Install Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
 
-      - name: Download cosmocc
-        run: |
-          curl -LO https://cosmo.zip/pub/cosmocc/cosmocc.zip
-          unzip cosmocc.zip -d cosmocc
-          echo "$PWD/cosmocc/bin" >> $GITHUB_PATH
-
       - name: Install JDK 24
         run: |
           curl -LO https://download.java.net/java/GA/jdk24.0.2/fdc5d0102fe0414db21410ad5834341f/12/GPL/openjdk-24.0.2_linux-x64_bin.tar.gz
           tar -xzf openjdk-24.0.2_linux-x64_bin.tar.gz
-
+          
       - name: Dump Minecraft server registries
         run: |
           mkdir notchian
@@ -44,18 +41,48 @@ jobs:
       - name: Generate registry headers
         run: |
           bun run build_registries.js
-
-      - name: Build project
+          
+      - name: Setup Alpine Linux for aarch64
+        uses: jirutka/setup-alpine@v1.3.0
+        with:
+          arch: aarch64
+          packages: >
+            build-base
+            
+      - name: Build ARM binary
         run: |
-          cosmocc src/*.c -O3 -Iinclude -o bareiron.exe
+          aarch64-linux-gnu-gcc src/*.c -O3 -Iinclude -o bareiron-arm64
+          
+      - name: Build ARM64 musl binary
+        run: gcc src/*.c -O3 -static -Iinclude -o bareiron-arm64-musl
+        shell: alpine.sh {0}
+
+      - name: Install Android NDK
+        run: |
+          curl -LO https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+          unzip -q android-ndk-r27c-linux.zip
+          mv android-ndk-r27c ndk
+          echo "${GITHUB_WORKSPACE}/ndk/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Build Termux binary
+        run: |
+          aarch64-linux-android21-clang src/*.c -O3 -Iinclude -o bareiron-termux
 
       - name: Upload release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Latest build
-          body: "This is a rolling release of bareiron, compiled from the latest commit on the main branch.\n\nThe executable (`bareiron.exe`) is a Cosmopolitan-built polyglot, and should run on Windows and Linux (and Mac?), despite the file extension."
-          files: bareiron.exe
+          name: Latest build (ARM64 musl + Termux)
+          body: |
+            This is a rolling release of **bareiron**, compiled for `aarch64`.
+
+            - `bareiron-arm64` → Glibc-based (Debian, Ubuntu, etc.)
+            - `bareiron-arm64-musl` → Statically linked, works on Alpine/postmarketOS
+            - `bareiron-termux` → Compiled with Android NDK, runs on Termux
+          files: |
+            bareiron-arm64
+            bareiron-arm64-musl
+            bareiron-termux
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
