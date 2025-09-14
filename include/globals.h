@@ -102,6 +102,11 @@
 // clients from Keep Alive packets.
 #define NETWORK_TIMEOUT_TIME 15000000
 
+// If defined, sends the server brand to clients. Doesn't do much, but will
+// show up in the top-left of the F3/debug menu, in the Minecraft client.
+// You can change the brand string in the "brand" variable in src/globals.c
+#define SEND_BRAND
+
 // If defined, rebroadcasts ALL incoming movement updates, disconnecting
 // movement from the server's tickrate. This makes movement much smoother
 // on very low tickrates, at the cost of potential network instability when
@@ -170,9 +175,12 @@ extern uint32_t server_ticks;
 extern char motd[];
 extern uint8_t motd_len;
 
-extern uint16_t client_count;
+#ifdef SEND_BRAND
+  extern char brand[];
+  extern uint8_t brand_len;
+#endif
 
-#pragma pack(push, 1)
+extern uint16_t client_count;
 
 typedef struct {
   short x;
@@ -180,6 +188,8 @@ typedef struct {
   uint8_t y;
   uint8_t block;
 } BlockChange;
+
+#pragma pack(push, 1)
 
 typedef struct {
   uint8_t uuid[16];
@@ -228,7 +238,8 @@ typedef struct {
   uint8_t y;
   short z;
   // Lower 5 bits: health
-  // Upper 3 bits: reserved (?)
+  // Middle 1 bit: reserved for future use
+  // Upper 2 bits: panic timer
   uint8_t data;
 } MobData;
 
